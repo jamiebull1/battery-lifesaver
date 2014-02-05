@@ -67,6 +67,16 @@ class BatteryMonitor:
         for _i, b in enumerate(batts):
             capacity += (b.RemainingCapacity or 0)            
         return capacity 
+    
+    @property
+    def time_remaining(self):
+        time_left = 0
+        batts = self.t.ExecQuery('Select * from BatteryStatus where Voltage > 0')
+        for _i, b in enumerate(batts):
+            time_left += float(b.RemainingCapacity) / float(b.DischargeRate)
+        hours = int(time_left)
+        mins = 60 * (time_left % 1.0)
+        return '%i hr %i min' % (hours, mins)
 
     @property
     def percentage_charge_remaining(self):        
@@ -111,7 +121,8 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
         if self.tray_object.plugged_in:
             return "%i%% available (plugged in, charging)" % (charge)
         else:
-            return "%i%% available" % (charge)
+            time = self.tray_object.time_remaining
+            return "%s (%i%%) remaining" % (time, charge)
         
     def Update(self):
         self.RefreshIcon()
@@ -152,13 +163,12 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
         
         self.menu.Append(ID_FULL_CHARGE, '&Charge to full', 'Fully charge without showing alerts')
         self.menu.Append(ID_AWAY_FROM_POWER, '&Pause plug-in alerts', 'Wait until next plugged in before resuming alerts')
-        self.menu.Append(wx.ID_EXIT, '&Remove icon', 'Remove icon and quit application')
+        self.menu.Append(wx.ID_EXIT, '&Quit', 'Remove icon and quit application')
 
         self.Bind(wx.EVT_MENU, self.tray_object.charge_to_full, id=ID_FULL_CHARGE)
         self.Bind(wx.EVT_MENU, self.tray_object.away_from_power, id=ID_AWAY_FROM_POWER)
         self.Bind(wx.EVT_MENU, self.OnQuit, id=wx.ID_EXIT)
         
-
     def OnQuit(self, e):
         self.Destroy()
         
