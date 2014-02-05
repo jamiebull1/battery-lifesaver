@@ -10,7 +10,6 @@ from math import floor
 import wmi
 import winsound
 import wx
-#from lifesaver.balloon_task_bar import BalloonTaskBarIcon
 from balloon_task_bar import BalloonTaskBarIcon
 
 import icons
@@ -21,6 +20,7 @@ class BatteryMonitor:
         self.c = wmi.WMI()
         self.t = wmi.WMI(moniker = "//./root/wmi")
         self.unplug_alert_enabled = True
+        self.plugin_alert_enabled = True
         self.PLUGIN_LEVEL = 0.4
         self.UNPLUG_LEVEL = 0.8
         
@@ -74,8 +74,10 @@ class BatteryMonitor:
         return charge
         
     def charge_to_full(self, e):
-        print "charging to full"
         self.unplug_alert_enabled = False
+    
+    def away_from_power(self, e):
+        self.plugin_alert_enabled = False        
     
     def should_unplug(self):
         return (self.percentage_charge_remaining > self.UNPLUG_LEVEL and
@@ -87,27 +89,35 @@ class BatteryMonitor:
                 not self.plugged_in)
         
 ID_FULL_CHARGE = wx.NewId()
+ID_AWAY_FROM_POWER = wx.NewId()
 
 class BatteryTaskBarIcon(BalloonTaskBarIcon):
     
     def __init__(self,
-                 tray_object,
-                 tooltip,
+                 tray_object
                  ):
         wx.TaskBarIcon.__init__(self)
         
         self.tray_object = tray_object
         self.icon = self.tray_object.icon.GetIcon()
-        self.tooltip = tooltip
-        self.SetIcon(self.icon, self.tooltip)
+        self.SetIcon(self.icon, self.Tooltip)
         self.CreateMenu()
         
         self.Update()
+    
+    @property
+    def Tooltip(self):
+        charge = self.tray_object.percentage_charge_remaining * 100
+        if self.tray_object.plugged_in:
+            return "%i%% available (plugged in, charging)" % (charge)
+        else:
+            return "%i%% available" % (charge)
         
     def Update(self):
         self.RefreshIcon()
         self.CheckBalloons()
         self.CheckForFullCharge()
+        self.CheckForPower()
         wx.CallLater(10000, self.Update)
     
     def CheckForFullCharge(self):
@@ -115,21 +125,24 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
             self.ShowBalloon("Fully charged",
                              "Your battery is now charged to 100%.")
     
+    def CheckForPower(self):
+        if self.tray_object.plugged_in:
+            self.tray_object.plugin_alert_enabled = True
+    
     def CheckBalloons(self):
         charge = self.tray_object.percentage_charge_remaining
         if self.tray_object.should_unplug():
             self.ShowBalloon("Unplug charger",
-                             "Battery is charged to %i%%. Unplug your charger now to maintain battery life." % (charge * 100))
+                             "Battery charge is at %i%%. Unplug your charger now to maintain battery life." % (charge * 100))
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
         if self.tray_object.should_plug_in():
             self.ShowBalloon("Plug in charger",
-                             "Battery is charged to %i%%. Plug in your charger now to maintain battery life." % (charge * 100))
+                             "Battery charge is at %i%%. Plug in your charger now to maintain battery life." % (charge * 100))
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
     
     def RefreshIcon(self):
         self.icon = self.tray_object.icon.GetIcon()
-#        self.icon.LoadFile(self.tray_object.icon, type=wx.BITMAP_TYPE_ICO)
-        self.SetIcon(self.icon, self.tooltip)        
+        self.SetIcon(self.icon, self.Tooltip)        
         
     def CreateMenu(self):
 
@@ -138,14 +151,15 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
         self.menu = wx.Menu()
         
         self.menu.Append(ID_FULL_CHARGE, '&Charge to full', 'Fully charge without showing alerts')
-        self.menu.Append(wx.ID_EXIT, '&Quit', 'Quit application')
+        self.menu.Append(ID_AWAY_FROM_POWER, '&Pause plug-in alerts', 'Wait until next plugged in before resuming alerts')
+        self.menu.Append(wx.ID_EXIT, '&Remove icon', 'Remove icon and quit application')
 
         self.Bind(wx.EVT_MENU, self.tray_object.charge_to_full, id=ID_FULL_CHARGE)
+        self.Bind(wx.EVT_MENU, self.tray_object.away_from_power, id=ID_AWAY_FROM_POWER)
         self.Bind(wx.EVT_MENU, self.OnQuit, id=wx.ID_EXIT)
         
 
     def OnQuit(self, e):
-        print "Quitting"
         self.Destroy()
         
     def OnPopup(self, event):
@@ -154,10 +168,9 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
 
 def main():
     bm = BatteryMonitor()
-    tooltip = "Battery life-preserver - beta"
     
     app = wx.App(False)
-    BatteryTaskBarIcon(bm, tooltip)
+    BatteryTaskBarIcon(bm)
     
     app.MainLoop()
 
