@@ -96,7 +96,8 @@ class BatteryMonitor:
         
     def should_plug_in(self):
         return (self.percentage_charge_remaining < self.PLUGIN_LEVEL and
-                not self.plugged_in)
+                not self.plugged_in and
+                self.plugin_alert_enabled)
         
 ID_FULL_CHARGE = wx.NewId()
 ID_AWAY_FROM_POWER = wx.NewId()
