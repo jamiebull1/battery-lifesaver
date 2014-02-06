@@ -130,10 +130,11 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
         self.CheckBalloons()
         self.CheckForFullCharge()
         self.CheckForPower()
-        wx.CallLater(10000, self.Update)
+        wx.CallLater(2000, self.Update)
     
     def CheckForFullCharge(self):
-        if self.tray_object.fully_charged:
+        if (self.tray_object.fully_charged and
+            self.tray_object.plugged_in):
             self.ShowBalloon("Fully charged",
                              "Your battery is now charged to 100%.")
     
