@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 '''
-Created on 4 Feb 2014
-
-@author: Jamie Bull
+Sourced from this StackOverflow answer http://stackoverflow.com/a/7526659/1706564
 '''
 
 import wx
@@ -16,7 +14,7 @@ except:
 
 class BalloonTaskBarIcon(wx.TaskBarIcon):
     """
-    Base Taskbar Icon Class
+    Base Taskbar BatteryIcon Class
     """
     def __init__(self):
         wx.TaskBarIcon.__init__(self)
@@ -31,7 +29,7 @@ class BalloonTaskBarIcon(wx.TaskBarIcon):
         """
         if WIN32 and self.IsIconInstalled():
             try:
-                self.__SetBalloonTip(self.icon.GetHandle(), title, text, msec, flags)
+                self.__SetBalloonTip(self.Icon.GetHandle(), title, text, msec, flags)
             except Exception:
                 pass # print(e) Silent error
 
@@ -52,7 +50,7 @@ class BalloonTaskBarIcon(wx.TaskBarIcon):
                   99,                       # ID
                   win32gui.NIF_MESSAGE|win32gui.NIF_INFO|win32gui.NIF_ICON, # flags: Combination of NIF_* flags
                   0,                        # CallbackMessage: Message id to be pass to hWnd when processing messages
-                  hicon,                    # hIcon: Handle to the icon to be displayed
+                  hicon,                    # hIcon: Handle to the BatteryIcon to be displayed
                   '',                       # Tip: Tooltip text
                   msg,                      # Info: Balloon tooltip text
                   msec,                     # Timeout: Timeout for balloon tooltip, in milliseconds
@@ -61,11 +59,11 @@ class BalloonTaskBarIcon(wx.TaskBarIcon):
                   )
         win32gui.Shell_NotifyIcon(win32gui.NIM_MODIFY, lpdata)
 
-        self.SetIcon(self.icon, self.tooltip)   # Hack: because we have no access to the real CallbackMessage value
+        self.SetIcon(self.BatteryIcon, self.tooltip)   # Hack: because we have no access to the real CallbackMessage value
 
     def __GetIconHandle(self):
         """
-        Find the icon window.
+        Find the Icon window.
         This is ugly but for now there is no way to find this window directly from wx
         """
         if not hasattr(self, "_chwnd"):
@@ -83,12 +81,12 @@ class BalloonTaskBarIcon(wx.TaskBarIcon):
                 raise Exception, "Icon window not found"
         return self._chwnd
 
-    def SetIcon(self, icon, tooltip = ""):
-        self.icon = icon
+    def SetIcon(self, Icon, tooltip = ""):
+        self.Icon = Icon
         self.tooltip = tooltip
-        wx.TaskBarIcon.SetIcon(self, icon, tooltip)
+        wx.TaskBarIcon.SetIcon(self, Icon, tooltip)
 
     def RemoveIcon(self):
-        self.icon = None
+        self.Icon = None
         self.tooltip = ""
         wx.TaskBarIcon.RemoveIcon(self)

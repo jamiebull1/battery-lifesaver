@@ -3,57 +3,57 @@
 '''
 Created on 4 Feb 2014
 
-@author: Jamie Bull
+@author: Jamie Bull - Young Bull Industries
 '''
 
-from math import floor
 import wmi
 import winsound
 import wx
-from balloon_task_bar import BalloonTaskBarIcon
+import webbrowser
+from math import floor
 
+from balloon_task_bar import BalloonTaskBarIcon
 import icons
 
 class BatteryMonitor:
+    ''' Class containing methods for testing power supply and battery
+        charge levels, and suggesting action to be taken to extend battery life'''
     
     def __init__(self):
         self.c = wmi.WMI()
         self.t = wmi.WMI(moniker = "//./root/wmi")
-        self.unplug_alert_enabled = True
-        self.plugin_alert_enabled = True
-        self.PLUGIN_LEVEL = 0.4
+        self.unplug_alert_enabled = True # Initialise to True
+        self.plugin_alert_enabled = True # Initialise to True
+        self.PLUGIN_LEVEL = 0.4 # Could be set to 0.3
         self.UNPLUG_LEVEL = 0.8
         
     @property
     def icon(self):
+        ''' Returns the appropriate icon for the current charge level and whether
+            the laptop is connected to a power supply '''
         charge = self.percentage_charge_remaining * 100
         charge = int(floor(charge/20)*20) # round down to nearest multiple of 20
-        if self.plugged_in:
+        if self.is_plugged_in:
             return icons.icons["%s%03d" % ("battery_charging_", charge)]
         else:
             return icons.icons["%s%03d" % ("battery_discharging_", charge)]
                     
     @property
-    def plugged_in(self):
+    def is_plugged_in(self):
+        ''' Returns True if laptop is connected to a power supply '''
         batts = self.t.ExecQuery('Select * from BatteryStatus where Voltage > 0')
         for _i, b in enumerate(batts):
             if b.PowerOnline:
                 return True
     
     @property
-    def fully_charged(self):
+    def is_fully_charged(self):
+        ''' Returns True if laptop is fully charged '''        
         return self.percentage_charge_remaining >= 1.0    
     
     @property
-    def design_capacity(self):
-        capacity = 0
-        batts = self.c.CIM_Battery(Caption = 'Portable Battery')
-        for _i, b in enumerate(batts):
-            capacity += (b.DesignCapacity or 0)
-        return capacity 
-
-    @property
     def full_charge_capacity(self):
+        ''' Returns capacity of the battery or batteries when fully charged '''
         capacity = 0
         batts = self.t.ExecQuery('Select * from BatteryFullChargedCapacity')
         for _i, b in enumerate(batts):
@@ -62,6 +62,7 @@ class BatteryMonitor:
 
     @property
     def remaining_capacity(self):
+        ''' Returns the remaining capacity of the battery or batteries '''
         capacity = 0
         batts = self.t.ExecQuery('Select * from BatteryStatus where Voltage > 0')
         for _i, b in enumerate(batts):
@@ -69,7 +70,17 @@ class BatteryMonitor:
         return capacity 
     
     @property
+    def percentage_charge_remaining(self):    
+        ''' Returns proportion of charge remaining as a float between 0.0 and 1.0 '''
+        charge = float(self.remaining_capacity) / float(self.full_charge_capacity)
+        return min(charge, 1.0)
+        
+    @property
     def time_remaining(self):
+        ''' Returns time remaining, calculated as for the Windows Battery Meter. It finds
+        a value for remaining battery life by dividing the remaining battery capacity 
+        by the current battery draining rate as described in the ACPI specification 
+        (chapter 3.9.3 'Battery Gas Gauge'). '''
         time_left = 0
         batts = self.t.ExecQuery('Select * from BatteryStatus where Voltage > 0')
         for _i, b in enumerate(batts):
@@ -78,111 +89,137 @@ class BatteryMonitor:
         mins = 60 * (time_left % 1.0)
         return '%i hr %i min' % (hours, mins)
 
-    @property
-    def percentage_charge_remaining(self):        
-        charge = float(self.remaining_capacity) / float(self.full_charge_capacity)
-        return charge
-        
-    def charge_to_full(self, e):
-        self.unplug_alert_enabled = False
-    
-    def away_from_power(self, e):
-        self.plugin_alert_enabled = False        
-    
     def should_unplug(self):
+        ''' Tests whether conditions are met for unplugging the laptop '''
         return (self.percentage_charge_remaining > self.UNPLUG_LEVEL and
-                self.plugged_in and
+                self.is_plugged_in and
                 self.unplug_alert_enabled)
         
     def should_plug_in(self):
+        ''' Tests whether conditions are met for plugging in the laptop '''
         return (self.percentage_charge_remaining < self.PLUGIN_LEVEL and
-                not self.plugged_in and
+                not self.is_plugged_in and
                 self.plugin_alert_enabled)
         
+
 ID_FULL_CHARGE = wx.NewId()
 ID_AWAY_FROM_POWER = wx.NewId()
 
 class BatteryTaskBarIcon(BalloonTaskBarIcon):
+    ''' Notification area (system tray) icon for output to user about their
+        battery status '''
     
     def __init__(self,
-                 tray_object
+                 laptop_batt
                  ):
         wx.TaskBarIcon.__init__(self)
-        
-        self.tray_object = tray_object
-        self.icon = self.tray_object.icon.GetIcon()
+        self.monitor_frequency = 2 # seconds
+        self.laptop_batt = laptop_batt
+        self.icon = self.BatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)
-        self.CreateMenu()
         
         self.Update()
     
     @property
     def Tooltip(self):
-        charge = self.tray_object.percentage_charge_remaining * 100
-        if self.tray_object.plugged_in:
+        ''' Generates a tooltip which replicates the Windows Battery Monitor '''
+        charge = self.laptop_batt.percentage_charge_remaining * 100
+        if self.laptop_batt.is_plugged_in:
             return "%i%% available (plugged in, charging)" % (charge)
         else:
-            time = self.tray_object.time_remaining
+            time = self.laptop_batt.time_remaining
             return "%s (%i%%) remaining" % (time, charge)
         
+    @property
+    def BatteryIcon(self):
+        ''' Returns the appropriate icon for the current charge level and whether
+            the laptop is connected to a power supply '''
+        charge = self.laptop_batt.percentage_charge_remaining * 100
+        charge = int(floor(charge/20)*20) # round down to nearest multiple of 20
+        if self.laptop_batt.is_plugged_in:
+            return icons.icons["%s%03d" % ("battery_charging_", charge)]
+        else:
+            return icons.icons["%s%03d" % ("battery_discharging_", charge)]
+                    
     def Update(self):
+        self.CreateMenu()
         self.RefreshIcon()
-        self.CheckBalloons()
-        self.CheckForFullCharge()
+        self.CheckAlertBalloons()
+        self.CheckFullyChargedBalloon()
         self.CheckForPower()
-        wx.CallLater(2000, self.Update)
+        wx.CallLater(self.monitor_frequency * 1000, self.Update)
     
-    def CheckForFullCharge(self):
-        if (self.tray_object.fully_charged and
-            self.tray_object.plugged_in):
+    def SilenceUplugAlert(self, e):
+        ''' Silences the unplug alert, for use when a full charge is desired '''
+        self.laptop_batt.unplug_alert_enabled = False
+    
+    def SilencePluginAlert(self, e):
+        ''' Silences the plugin alert, for use when away from a charging point '''
+        self.laptop_batt.plugin_alert_enabled = False        
+    
+    def CheckFullyChargedBalloon(self):
+        ''' Tests if fully charged and fires alert if required '''
+        if (self.laptop_batt.is_fully_charged and
+            self.laptop_batt.is_plugged_in):
             self.ShowBalloon("Fully charged",
                              "Your battery is now charged to 100%.")
     
     def CheckForPower(self):
-        if self.tray_object.plugged_in:
-            self.tray_object.plugin_alert_enabled = True
+        ''' Tests if plugged in enables plugin alert if required'''
+        if self.laptop_batt.is_plugged_in:
+            self.laptop_batt.plugin_alert_enabled = True
     
-    def CheckBalloons(self):
-        charge = self.tray_object.percentage_charge_remaining
-        if self.tray_object.should_unplug():
+    def CheckAlertBalloons(self):
+        charge = self.laptop_batt.percentage_charge_remaining
+        if self.laptop_batt.should_unplug():
             self.ShowBalloon("Unplug charger",
                              "Battery charge is at %i%%. Unplug your charger now to maintain battery life." % (charge * 100))
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
-        if self.tray_object.should_plug_in():
+        if self.laptop_batt.should_plug_in():
             self.ShowBalloon("Plug in charger",
                              "Battery charge is at %i%%. Plug in your charger now to maintain battery life." % (charge * 100))
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
     
     def RefreshIcon(self):
-        self.icon = self.tray_object.icon.GetIcon()
+        self.icon = self.BatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)        
         
     def CreateMenu(self):
-
-        self.Bind(wx.EVT_TASKBAR_RIGHT_UP, self.OnPopup)
+        ''' Generates a context-aware menu. The user is only offered the relevant option
+            depending on whether their laptop is plugged in '''
+        self.Bind(wx.EVT_TASKBAR_RIGHT_UP, self.OnPopup)        
         
         self.menu = wx.Menu()
-        
-        self.menu.Append(ID_FULL_CHARGE, '&Charge to full', 'Fully charge without showing alerts')
-        self.menu.Append(ID_AWAY_FROM_POWER, '&Pause plug-in alerts', 'Wait until next plugged in before resuming alerts')
-        self.menu.Append(wx.ID_EXIT, '&Quit', 'Remove icon and quit application')
-
-        self.Bind(wx.EVT_MENU, self.tray_object.charge_to_full, id=ID_FULL_CHARGE)
-        self.Bind(wx.EVT_MENU, self.tray_object.away_from_power, id=ID_AWAY_FROM_POWER)
-        self.Bind(wx.EVT_MENU, self.OnQuit, id=wx.ID_EXIT)
-        
-    def OnQuit(self, e):
-        self.Destroy()
+        if self.laptop_batt.is_plugged_in:
+            self.menu.Append(ID_FULL_CHARGE, '&Charge to full', 'Fully charge without showing alerts')
+            self.Bind(wx.EVT_MENU, self.SilenceUplugAlert, id=ID_FULL_CHARGE)
+        else:
+            self.menu.Append(ID_AWAY_FROM_POWER, '&Silence alert', 'Wait until next plugged in before resuming alerts')
+            self.Bind(wx.EVT_MENU, self.SilencePluginAlert, id=ID_AWAY_FROM_POWER)
+        self.menu.AppendSeparator()
+        self.menu.Append(wx.ID_ABOUT, '&Website', 'About this program')
+        self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
+        self.menu.Append(wx.ID_EXIT, 'E&xit', 'Remove icon and quit application')
+        self.Bind(wx.EVT_MENU, self.OnExit, id=wx.ID_EXIT)
         
     def OnPopup(self, event):
+        ''' Generates the right click menu '''
         self.PopupMenu(self.menu)
 
+    def OnExit(self, e):
+        ''' Removes the icon from the notification area and closes the program '''
+        self.Destroy()
+        
+    def OnAbout(self, e):
+        ''' Launches the Battery Lifesaver webpage '''
+        webbrowser.open("http://youngbullindustries.wordpress.com/about-battery-lifesaver/")
+        
 
 def main():
-    bm = BatteryMonitor()
+    batt = BatteryMonitor()
     
     app = wx.App(False)
-    BatteryTaskBarIcon(bm)
+    BatteryTaskBarIcon(batt)
     
     app.MainLoop()
 
