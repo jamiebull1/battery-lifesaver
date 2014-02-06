@@ -6,14 +6,15 @@ Created on 4 Feb 2014
 @author: Jamie Bull - Young Bull Industries
 '''
 
+import webbrowser
 import wmi
 import winsound
-import wx
-import webbrowser
 from math import floor
 
-from balloon_task_bar import BalloonTaskBarIcon
+import wx
+
 import icons
+from balloon_task_bar import BalloonTaskBarIcon
 
 class BatteryMonitor:
     ''' Class containing methods for testing power supply and battery
@@ -27,17 +28,6 @@ class BatteryMonitor:
         self.PLUGIN_LEVEL = 0.4 # Could be set to 0.3
         self.UNPLUG_LEVEL = 0.8
         
-    @property
-    def icon(self):
-        ''' Returns the appropriate icon for the current charge level and whether
-            the laptop is connected to a power supply '''
-        charge = self.percentage_charge_remaining * 100
-        charge = int(floor(charge/20)*20) # round down to nearest multiple of 20
-        if self.is_plugged_in:
-            return icons.icons["%s%03d" % ("battery_charging_", charge)]
-        else:
-            return icons.icons["%s%03d" % ("battery_discharging_", charge)]
-                    
     @property
     def is_plugged_in(self):
         ''' Returns True if laptop is connected to a power supply '''
@@ -113,7 +103,7 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
                  laptop_batt
                  ):
         wx.TaskBarIcon.__init__(self)
-        self.monitor_frequency = 2 # seconds
+        self.monitor_frequency = 2 # how often to check levels (in seconds)
         self.laptop_batt = laptop_batt
         self.icon = self.BatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)
@@ -181,6 +171,7 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
     
     def RefreshIcon(self):
+        ''' Sets the appropriate icon depending on power state '''
         self.icon = self.BatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)        
         
