@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# coding=utf-8
 '''
 Created on 5 Feb 2014
 
