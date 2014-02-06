@@ -14,7 +14,7 @@ except:
 
 class BalloonTaskBarIcon(wx.TaskBarIcon):
     """
-    Base Taskbar BatteryIcon Class
+    Base TaskbarIcon Class
     """
     def __init__(self):
         wx.TaskBarIcon.__init__(self)
