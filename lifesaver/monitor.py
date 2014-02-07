@@ -18,11 +18,13 @@ import icons
 
 # Logging setup
 import logging
+VERSION_NUMBER = '0.0.5-beta'
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-debug_handler = logging.FileHandler('bl.debug.log')
+debug_handler = logging.FileHandler('bl_%s.debug.log' % VERSION_NUMBER)
 debug_handler.setLevel(logging.DEBUG)
-info_handler = logging.FileHandler('bl.info.log')
+info_handler = logging.FileHandler('bl_%s.info.log' % VERSION_NUMBER)
 info_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 debug_handler.setFormatter(formatter)
@@ -30,8 +32,6 @@ info_handler.setFormatter(formatter)
 logger.addHandler(debug_handler)
 logger.addHandler(info_handler)
 
-
-VERSION_NUMBER = '0.0.5-beta'
 
 class BatteryMonitor:
     ''' Class containing methods for testing power supply and battery
