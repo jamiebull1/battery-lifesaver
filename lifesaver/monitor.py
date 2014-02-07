@@ -14,7 +14,7 @@ from math import floor
 import wx
 
 import icons
-from balloon_task_bar import BalloonTaskBarIcon
+
 
 class BatteryMonitor:
     ''' Class containing methods for testing power supply and battery
@@ -25,7 +25,8 @@ class BatteryMonitor:
         self.t = wmi.WMI(moniker = "//./root/wmi")
         self.unplug_alert_enabled = True # Initialise to True
         self.plugin_alert_enabled = True # Initialise to True
-        self.PLUGIN_LEVEL = 0.4 # Could be set to 0.3
+        self.fully_charged_alert_enabled = True # Initialise to True
+        self.PLUGIN_LEVEL = 0.3
         self.UNPLUG_LEVEL = 0.8
         self.rolling_power_level = []
     
@@ -64,6 +65,7 @@ class BatteryMonitor:
     def percentage_charge_remaining(self):    
         ''' Returns proportion of charge remaining as a float between 0.0 and 1.0 '''
         charge = float(self.remaining_capacity) / float(self.full_charge_capacity)
+        return 1.0
         return min(charge, 1.0)
         
     @property
@@ -84,7 +86,8 @@ class BatteryMonitor:
         ''' Tests whether conditions are met for unplugging the laptop '''
         return (self.percentage_charge_remaining > self.UNPLUG_LEVEL and
                 self.is_plugged_in and
-                self.unplug_alert_enabled)
+                self.unplug_alert_enabled and
+                self.fully_charged_alert_enabled)
         
     def should_plug_in(self):
         ''' Tests whether conditions are met for plugging in the laptop '''
@@ -93,10 +96,11 @@ class BatteryMonitor:
                 self.plugin_alert_enabled)
         
 
-ID_FULL_CHARGE = wx.NewId()
-ID_AWAY_FROM_POWER = wx.NewId()
+ID_SILENCE_UNPLUG_ALERT = wx.NewId()
+ID_SILENCE_PLUGIN_ALERT = wx.NewId()
+ID_SILENCE_FULLY_CHARGED_ALERT = wx.NewId()
 
-class BatteryTaskBarIcon(BalloonTaskBarIcon):
+class BatteryTaskBarIcon(wx.TaskBarIcon):
     ''' Notification area (system tray) icon for output to user about their
         battery status '''
     
@@ -104,11 +108,11 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
                  laptop_batt
                  ):
         wx.TaskBarIcon.__init__(self)
-        self.monitor_frequency = 2 # how often to check levels (in seconds)
+        self.monitor_frequency = 2 # how often to check levels (secs)
+        self.full_charge_reminder_frequency = 300 # how often to remind that battery is full (secs)
         self.laptop_batt = laptop_batt
         self.icon = self.BatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)
-        
         self.Update()
     
     @property
@@ -135,10 +139,12 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
     def Update(self):
         self.CreateMenu()
         self.RefreshIcon()
+        self.ResetAlertsBasedOnPowerStatus()
         self.CheckAlertBalloons()
-        self.CheckFullyChargedBalloon()
-        self.CheckForPower()
-        wx.CallLater(self.monitor_frequency * 1000, self.Update)
+        wx.CallLater(self.full_charge_reminder_frequency * 1000,
+                     self.CheckFullyChargedBalloon)
+        wx.CallLater(self.monitor_frequency * 1000,
+                     self.Update)
     
     def SilenceUplugAlert(self, e):
         ''' Silences the unplug alert, for use when a full charge is desired '''
@@ -148,17 +154,27 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
         ''' Silences the plugin alert, for use when away from a charging point '''
         self.laptop_batt.plugin_alert_enabled = False        
     
+    def SilenceFullyChargedAlert(self, e):
+        ''' Silences the full charge alert, for use when not ready to leave charging point '''
+        self.laptop_batt.fully_charged_alert_enabled = False        
+
     def CheckFullyChargedBalloon(self):
         ''' Tests if fully charged and fires alert if required '''
         if (self.laptop_batt.is_fully_charged and
-            self.laptop_batt.is_plugged_in):
+            self.laptop_batt.is_plugged_in and
+            self.laptop_batt.fully_charged_alert_enabled):
             self.ShowBalloon("Fully charged",
                              "Your battery is now charged to 100%.")
     
-    def CheckForPower(self):
+    def ResetAlertsBasedOnPowerStatus(self):
         ''' Tests if plugged in enables plugin alert if required'''
-        if self.laptop_batt.is_plugged_in:
+        if (self.laptop_batt.is_plugged_in and
+            self.laptop_batt.fully_charged_alert_enabled):
             self.laptop_batt.plugin_alert_enabled = True
+        elif not self.laptop_batt.is_plugged_in:
+            self.laptop_batt.unplug_alert_enabled = True
+            self.laptop_batt.fully_charged_alert_enabled = True
+            
     
     def CheckAlertBalloons(self):
         charge = self.laptop_batt.percentage_charge_remaining
@@ -183,11 +199,13 @@ class BatteryTaskBarIcon(BalloonTaskBarIcon):
         
         self.menu = wx.Menu()
         if self.laptop_batt.is_plugged_in:
-            self.menu.Append(ID_FULL_CHARGE, '&Charge to full', 'Fully charge without showing alerts')
-            self.Bind(wx.EVT_MENU, self.SilenceUplugAlert, id=ID_FULL_CHARGE)
-        else:
-            self.menu.Append(ID_AWAY_FROM_POWER, '&Silence alert', 'Wait until next plugged in before resuming alerts')
-            self.Bind(wx.EVT_MENU, self.SilencePluginAlert, id=ID_AWAY_FROM_POWER)
+            self.menu.Append(ID_SILENCE_FULLY_CHARGED_ALERT, 'Silence &Full Charge Alert', 'Continue not showing alerts')
+            self.Bind(wx.EVT_MENU, self.SilenceFullyChargedAlert, id=ID_SILENCE_FULLY_CHARGED_ALERT)
+            self.menu.Append(ID_SILENCE_UNPLUG_ALERT, 'Silence &Unplug Alert', 'Fully charge without showing alerts')
+            self.Bind(wx.EVT_MENU, self.SilenceUplugAlert, id=ID_SILENCE_UNPLUG_ALERT)
+        elif not self.laptop_batt.is_plugged_in:
+            self.menu.Append(ID_SILENCE_PLUGIN_ALERT, 'Silence &Plugin Alert', 'Wait until next plugged in before resuming alerts')
+            self.Bind(wx.EVT_MENU, self.SilencePluginAlert, id=ID_SILENCE_PLUGIN_ALERT)
         self.menu.AppendSeparator()
         self.menu.Append(wx.ID_ABOUT, '&Website', 'About this program')
         self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
