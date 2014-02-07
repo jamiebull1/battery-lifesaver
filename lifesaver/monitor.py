@@ -28,8 +28,8 @@ class BatteryMonitor:
         self.fully_charged_alert_enabled = True # Initialise to True
         self.PLUGIN_LEVEL = 0.3
         self.UNPLUG_LEVEL = 0.8
-        self.rolling_power_level = []
-    
+        self.reset_time_remaining_queue()
+        
     @property
     def is_plugged_in(self):
         ''' Returns True if laptop is connected to a power supply '''
@@ -65,8 +65,7 @@ class BatteryMonitor:
     def percentage_charge_remaining(self):    
         ''' Returns proportion of charge remaining as a float between 0.0 and 1.0 '''
         charge = float(self.remaining_capacity) / float(self.full_charge_capacity)
-        return 1.0
-        return min(charge, 1.0)
+        return min(charge, 1.0)        
         
     @property
     def time_remaining(self):
@@ -78,9 +77,17 @@ class BatteryMonitor:
         batts = self.t.ExecQuery('Select * from BatteryStatus where Voltage > 0')
         for _i, b in enumerate(batts):
             time_left += float(b.RemainingCapacity) / float(b.DischargeRate)
-        hours = int(time_left)
-        mins = 60 * (time_left % 1.0)
-        return '%i hr %i min' % (hours, mins)
+        self.time_remaining_queue += [time_left]
+        self.time_remaining_queue = self.time_remaining_queue[1:]
+        if not float('-inf') in self.time_remaining_queue:
+            average_time_remaining = sum(self.time_remaining_queue)/len(self.time_remaining_queue)
+            hours = int(average_time_remaining)
+            mins = 60 * (average_time_remaining % 1.0)
+            print self.time_remaining_queue
+            return '%i hr %i min' % (hours, mins)
+
+    def reset_time_remaining_queue(self):
+        self.time_remaining_queue = [float('-inf')] * 20
 
     def should_unplug(self):
         ''' Tests whether conditions are met for unplugging the laptop '''
@@ -113,6 +120,7 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         self.laptop_batt = laptop_batt
         self.icon = self.BatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)
+        self.CreateMenu()
         self.Update()
     
     @property
@@ -120,11 +128,17 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         ''' Generates a tooltip which replicates the Windows Battery Monitor '''
         charge = self.laptop_batt.percentage_charge_remaining * 100
         if self.laptop_batt.is_plugged_in:
-            return "%i%% available (plugged in, charging)" % (charge)
-        else:
-            time = self.laptop_batt.time_remaining
-            return "%s (%i%%) remaining" % (time, charge)
-        
+            if self.laptop_batt.is_fully_charged:
+                return "Fully charged (100%)"
+            else:
+                return "%i%% available (plugged in, charging)" % (charge)
+        elif not self.laptop_batt.is_plugged_in:
+            time_remaining = self.laptop_batt.time_remaining
+            if not time_remaining is None:
+                return "%s (%i%%) remaining" % (time_remaining, charge)
+            else:
+                return "%i%% remaining" % (charge)
+                        
     @property
     def BatteryIcon(self):
         ''' Returns the appropriate icon for the current charge level and whether
@@ -137,7 +151,6 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
             return icons.icons["%s%03d" % ("battery_discharging_", charge)]
                     
     def Update(self):
-        self.CreateMenu()
         self.RefreshIcon()
         self.ResetAlertsBasedOnPowerStatus()
         self.CheckAlertBalloons()
@@ -149,14 +162,17 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
     def SilenceUplugAlert(self, e):
         ''' Silences the unplug alert, for use when a full charge is desired '''
         self.laptop_batt.unplug_alert_enabled = False
+        self.menu.Enable(id=ID_SILENCE_UNPLUG_ALERT, enable=False) 
     
     def SilencePluginAlert(self, e):
         ''' Silences the plugin alert, for use when away from a charging point '''
-        self.laptop_batt.plugin_alert_enabled = False        
+        self.laptop_batt.plugin_alert_enabled = False
+        self.menu.Enable(id=ID_SILENCE_PLUGIN_ALERT, enable=False) 
     
     def SilenceFullyChargedAlert(self, e):
         ''' Silences the full charge alert, for use when not ready to leave charging point '''
         self.laptop_batt.fully_charged_alert_enabled = False        
+        self.menu.Enable(id=ID_SILENCE_FULLY_CHARGED_ALERT, enable=False) 
 
     def CheckFullyChargedBalloon(self):
         ''' Tests if fully charged and fires alert if required '''
@@ -174,7 +190,19 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         elif not self.laptop_batt.is_plugged_in:
             self.laptop_batt.unplug_alert_enabled = True
             self.laptop_batt.fully_charged_alert_enabled = True
-            
+            #===================================================================
+            # self.menu.Enable(id=ID_SILENCE_UNPLUG_ALERT, enable=True) 
+            # self.menu.Enable(id=ID_SILENCE_FULLY_CHARGED_ALERT, enable=False) 
+            # self.menu.Enable(id=ID_SILENCE_PLUGIN_ALERT, enable=False) 
+            #===================================================================
+        self.menu.Enable(id=ID_SILENCE_PLUGIN_ALERT,
+                         enable=self.laptop_batt.plugin_alert_enabled) 
+        self.menu.Enable(id=ID_SILENCE_UNPLUG_ALERT,
+                         enable=self.laptop_batt.unplug_alert_enabled) 
+        self.menu.Enable(id=ID_SILENCE_FULLY_CHARGED_ALERT,
+                         enable=self.laptop_batt.fully_charged_alert_enabled) 
+        if self.laptop_batt.is_plugged_in:
+            self.laptop_batt.reset_time_remaining_queue
     
     def CheckAlertBalloons(self):
         charge = self.laptop_batt.percentage_charge_remaining
@@ -198,14 +226,12 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         self.Bind(wx.EVT_TASKBAR_RIGHT_UP, self.OnPopup)        
         
         self.menu = wx.Menu()
-        if self.laptop_batt.is_plugged_in:
-            self.menu.Append(ID_SILENCE_FULLY_CHARGED_ALERT, 'Silence &Full Charge Alert', 'Continue not showing alerts')
-            self.Bind(wx.EVT_MENU, self.SilenceFullyChargedAlert, id=ID_SILENCE_FULLY_CHARGED_ALERT)
-            self.menu.Append(ID_SILENCE_UNPLUG_ALERT, 'Silence &Unplug Alert', 'Fully charge without showing alerts')
-            self.Bind(wx.EVT_MENU, self.SilenceUplugAlert, id=ID_SILENCE_UNPLUG_ALERT)
-        elif not self.laptop_batt.is_plugged_in:
-            self.menu.Append(ID_SILENCE_PLUGIN_ALERT, 'Silence &Plugin Alert', 'Wait until next plugged in before resuming alerts')
-            self.Bind(wx.EVT_MENU, self.SilencePluginAlert, id=ID_SILENCE_PLUGIN_ALERT)
+        self.menu.Append(ID_SILENCE_FULLY_CHARGED_ALERT, 'Silence &Full Charge Alert', 'Continue not showing alerts')
+        self.Bind(wx.EVT_MENU, self.SilenceFullyChargedAlert, id=ID_SILENCE_FULLY_CHARGED_ALERT)
+        self.menu.Append(ID_SILENCE_UNPLUG_ALERT, 'Silence &Unplug Alert', 'Fully charge without showing alerts')
+        self.Bind(wx.EVT_MENU, self.SilenceUplugAlert, id=ID_SILENCE_UNPLUG_ALERT)
+        self.menu.Append(ID_SILENCE_PLUGIN_ALERT, 'Silence &Plugin Alert', 'Wait until next plugged in before resuming alerts')
+        self.Bind(wx.EVT_MENU, self.SilencePluginAlert, id=ID_SILENCE_PLUGIN_ALERT)
         self.menu.AppendSeparator()
         self.menu.Append(wx.ID_ABOUT, '&Website', 'About this program')
         self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
