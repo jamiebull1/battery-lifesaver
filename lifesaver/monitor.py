@@ -6,6 +6,7 @@ Created on 4 Feb 2014
 @author: Jamie Bull - Young Bull Industries
 '''
 
+import os
 import webbrowser
 import wmi
 import winsound
@@ -131,7 +132,7 @@ class BatteryMonitor:
             return '%i hr %i min' % (hours, mins)
 
     def reset_time_remaining_queue(self):
-        self.time_remaining_queue = [float('-inf')] * 20
+        self.time_remaining_queue = [float('-inf')] * 30
 
     def should_unplug(self):
         ''' Tests whether conditions are met for unplugging the laptop '''
@@ -153,6 +154,10 @@ class BatteryMonitor:
 ID_SILENCE_UNPLUG_ALERT = wx.NewId()
 ID_SILENCE_PLUGIN_ALERT = wx.NewId()
 ID_SILENCE_FULLY_CHARGED_ALERT = wx.NewId()
+ID_SCREEN_BRIGHTNESS = wx.NewId()
+ID_POWER_OPTIONS = wx.NewId()
+ID_MOBILITY_CENTER = wx.NewId()
+ID_NOTIFICATION_ICONS = wx.NewId()
 
 class BatteryTaskBarIcon(wx.TaskBarIcon):
     ''' Notification area (system tray) icon for output to user about their
@@ -212,24 +217,6 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         wx.CallLater(self.monitor_frequency * 1000,
                      self.Update)
     
-    def SilenceFullyChargedAlert(self, e):
-        ''' Silences the full charge alert, for use when not ready to leave charging point '''
-        self.laptop_batt.fully_charged_alert_enabled = False        
-        self.menu.Enable(id=ID_SILENCE_FULLY_CHARGED_ALERT, enable=False) 
-        logging.info("Silencing fully charged alert")
-
-    def SilenceUplugAlert(self, e):
-        ''' Silences the unplug alert, for use when a full charge is desired '''
-        self.laptop_batt.unplug_alert_enabled = False
-        self.menu.Enable(id=ID_SILENCE_UNPLUG_ALERT, enable=False) 
-        logging.info("Silencing unplug alert")
-    
-    def SilencePluginAlert(self, e):
-        ''' Silences the plugin alert, for use when away from a charging point '''
-        self.laptop_batt.plugin_alert_enabled = False
-        self.menu.Enable(id=ID_SILENCE_PLUGIN_ALERT, enable=False) 
-        logging.info("Silencing plug in alert")
-    
     def CheckFullyChargedBalloon(self):
         ''' Tests if fully charged and fires alert if required '''
         if (self.laptop_batt.is_fully_charged and
@@ -255,13 +242,6 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
                 logger.info('Not plugged in. Resetting fully charged alert')            
                 self.laptop_batt.fully_charged_alert_enabled = True
             
-        #=======================================================================
-        # logger.debug('\tPlugged in: %s' % self.laptop_batt.is_plugged_in)
-        # logger.info('\tFully charged alert enabled: %s' % self.laptop_batt.fully_charged_alert_enabled)
-        # logger.info('\tPlug in alert enabled: %s' % self.laptop_batt.plugin_alert_enabled)
-        # logger.info('\tUnplug alert enabled: %s' % self.laptop_batt.unplug_alert_enabled)
-        #=======================================================================
-
         self.menu.Enable(id=ID_SILENCE_FULLY_CHARGED_ALERT,
                          enable=(self.laptop_batt.fully_charged_alert_enabled and
                                  self.laptop_batt.is_plugged_in)) 
@@ -295,22 +275,82 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         ''' Generates a context-aware menu. The user is only offered the relevant option
             depending on whether their laptop is plugged in '''
         logging.info("Creating icon menu")
+        self.Bind(wx.EVT_TASKBAR_LEFT_UP, self.PowerStatusAndPlansWindow)        
         self.Bind(wx.EVT_TASKBAR_RIGHT_UP, self.OnPopup)        
         
         self.menu = wx.Menu()
+        # Alert buttons
         self.menu.Append(ID_SILENCE_FULLY_CHARGED_ALERT, 'Silence &Full Charge Alert', 'Continue not showing alerts')
         self.Bind(wx.EVT_MENU, self.SilenceFullyChargedAlert, id=ID_SILENCE_FULLY_CHARGED_ALERT)
         self.menu.Append(ID_SILENCE_PLUGIN_ALERT, 'Silence &Plugin Alert', 'Wait until next plugged in before resuming alerts')
         self.Bind(wx.EVT_MENU, self.SilencePluginAlert, id=ID_SILENCE_PLUGIN_ALERT)
         self.menu.Append(ID_SILENCE_UNPLUG_ALERT, 'Silence &Unplug Alert', 'Fully charge without showing alerts')
         self.Bind(wx.EVT_MENU, self.SilenceUplugAlert, id=ID_SILENCE_UNPLUG_ALERT)
+        
+        # Replicated Windows Power Widget options here
+        self.menu.AppendSeparator()
+        self.menu.Append(ID_SCREEN_BRIGHTNESS, 'Adjust screen brightness', 'Launch Power Options dialogue')
+        self.Bind(wx.EVT_MENU, self.LaunchPowerOptions, id=ID_SCREEN_BRIGHTNESS)
+        self.menu.Append(ID_POWER_OPTIONS, 'Power Options', 'Launch Power Options dialogue')
+        self.Bind(wx.EVT_MENU, self.LaunchPowerOptions, id=ID_POWER_OPTIONS)
+        self.menu.Append(ID_MOBILITY_CENTER, 'Windows Mobility Center', 'Launch Windows Mobility Center dialogue')
+        self.Bind(wx.EVT_MENU, self.LaunchMobilityCenter, id=ID_MOBILITY_CENTER)
+        self.menu.AppendSeparator()
+        self.menu.Append(ID_NOTIFICATION_ICONS, 'Turn system icons on or off', 'Launch Windows Notification Area Icons Options dialogue')
+        self.Bind(wx.EVT_MENU, self.LaunchNotificationAreaIconsOptions, id=ID_NOTIFICATION_ICONS)
+        # About and Exit options
         self.menu.AppendSeparator()
         self.menu.Append(wx.ID_ABOUT, '&Website', 'About this program')
         self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
         self.menu.Append(wx.ID_EXIT, 'E&xit', 'Remove icon and quit application')
         self.Bind(wx.EVT_MENU, self.OnExit, id=wx.ID_EXIT)
-        
-    def OnPopup(self, event):
+    
+    def SilenceFullyChargedAlert(self, e):
+        ''' Silences the full charge alert, for use when not ready to leave charging point '''
+        self.laptop_batt.fully_charged_alert_enabled = False        
+        self.menu.Enable(id=ID_SILENCE_FULLY_CHARGED_ALERT, enable=False) 
+        logging.info("Silencing fully charged alert")
+
+    def SilenceUplugAlert(self, e):
+        ''' Silences the unplug alert, for use when a full charge is desired '''
+        self.laptop_batt.unplug_alert_enabled = False
+        self.menu.Enable(id=ID_SILENCE_UNPLUG_ALERT, enable=False) 
+        logging.info("Silencing unplug alert")
+    
+    def SilencePluginAlert(self, e):
+        ''' Silences the plugin alert, for use when away from a charging point '''
+        self.laptop_batt.plugin_alert_enabled = False
+        self.menu.Enable(id=ID_SILENCE_PLUGIN_ALERT, enable=False) 
+        logging.info("Silencing plug in alert")
+    
+    def LaunchPowerOptions(self, e):
+        ''' Opens the Control Panel Power Options dialogue '''
+        try:
+            os.system('control.exe /name Microsoft.PowerOptions')
+        except:
+            os.system('control.exe main.cpl power')
+            
+    def LaunchNotificationAreaIconsOptions(self, e):
+        ''' Opens the Control Panel Notification Area Icons Options dialogue '''
+        os.system('control.exe /name Microsoft.NotificationAreaIcons')
+
+    def LaunchMobilityCenter(self, e):
+        ''' Opens the Windows Mobility Center dialogue '''
+        windir = os.environ['WINDIR']
+        os.system(os.path.join(windir, 'Sysnative\mblctr.exe'))
+
+    def PowerStatusAndPlansWindow(self, e):
+        ''' Generates a power options window '''
+        # Create a window
+        window = PowerStatusAndPlansWindow(self)
+        window.BatteryIcon(self.BatteryIcon.GetIcon())
+        window.PowerStatusText(self.Tooltip)
+        window.BatteryStatus()
+        window.PowerPlanOptions()
+        window.PowerWarnings()
+        window.Links()
+    
+    def OnPopup(self, e):
         ''' Generates the right click menu '''
         self.PopupMenu(self.menu)
 
@@ -323,7 +363,46 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         ''' Launches the Battery Lifesaver webpage '''
         webbrowser.open("http://youngbullindustries.wordpress.com/about-battery-lifesaver/")
         
-
+class PowerStatusAndPlansWindow(wx.Frame):
+    
+    def __init__(self, parent):
+        frame = wx.Frame(None)
+        wx.Frame.__init__(self, frame, style=wx.CAPTION)
+        panel = wx.Panel(self, wx.ID_ANY) 
+        panel.Bind(wx.EVT_KILL_FOCUS, self.OnKillFocus)
+        self.SetSize(wx.Size(260,320))
+        self.AlignToBottomCenter(wx.GetMousePosition())
+        self.Show()
+        self.Raise()
+        
+    def AlignToBottomCenter(self, pos):
+        dw, dh = pos
+        w, h = self.GetSize()
+        x = dw - w/2
+        y = dh - h - 25
+        self.SetPosition((x, y))
+    
+    def OnKillFocus(self, e):
+        self.Close()
+        
+    def BatteryIcon(self, icon):
+        pass
+    
+    def PowerStatusText(self, text):
+        pass
+    
+    def BatteryStatus(self, text):
+        pass
+    
+    def PowerPlanOptions(self):
+        pass
+    
+    def PowerWarnings(self):
+        pass
+    
+    def Links(self):
+        pass
+    
 def main():
     batt = BatteryMonitor()
     
