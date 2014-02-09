@@ -170,11 +170,8 @@ ID_SILENCE_PLUGIN_ALERT = wx.NewId()
 ID_SILENCE_FULLY_CHARGED_ALERT = wx.NewId()
 ID_SCREEN_BRIGHTNESS = wx.NewId()
 ID_POWER_OPTIONS = wx.NewId()
-ID_SCREEN_BRIGHTNESS = wx.NewId()
-ID_SCREEN_BRIGHTNESS = wx.NewId()
-ID_SCREEN_BRIGHTNESS = wx.NewId()
-ID_SCREEN_BRIGHTNESS = wx.NewId()
-ID_SCREEN_BRIGHTNESS = wx.NewId()
+ID_MOBILITY_CENTER = wx.NewId()
+ID_NOTIFICATION_ICONS = wx.NewId()
 
 class BatteryTaskBarIcon(wx.TaskBarIcon):
     ''' Notification area (system tray) icon for output to user about their
@@ -184,15 +181,14 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
                  laptop_batt
                  ):
         wx.TaskBarIcon.__init__(self)
+        self.options_window = PowerStatusAndPlansWindow(self)
         self.monitor_frequency = 2 # how often to check levels (secs)
         self.full_charge_reminder_frequency = 300 # how often to remind that battery is full (secs)
         self.laptop_batt = laptop_batt
-        self.options_window = PowerStatusAndPlansWindow(self)
-        self.icon = self.BatteryIcon.GetIcon()
+        self.icon = self.SetBatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)
         self.CreateMenu()
         self.Update()
-        self.Bind(wx.EVT_TASKBAR_LEFT_UP, self.options_window.ToggleVisibility)
     
     @property
     def Tooltip(self):
@@ -209,11 +205,11 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
                 tooltip = "%s (%i%%) remaining" % (time_remaining, charge)
             else:
                 tooltip = "%i%% remaining" % (charge)
-        logger.debug("Tooltip is %s" % tooltip)
+        logging.debug("Tooltip is %s" % tooltip)
         return tooltip
     
     @property
-    def BatteryIcon(self):
+    def SetBatteryIcon(self):
         ''' Returns the appropriate icon for the current charge level and whether
             the laptop is connected to a power supply '''
         charge = self.laptop_batt.percentage_charge_remaining * 100
@@ -222,7 +218,7 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
             ico = icons.icons["%s%03d" % ("battery_charging_", charge)]
         else:
             ico = icons.icons["%s%03d" % ("battery_discharging_", charge)]
-        logger.debug("Icon is %s" % ico)
+        logging.debug("Icon is %s" % ico)
         return ico
            
     def Update(self):
@@ -236,30 +232,12 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         wx.CallLater(self.monitor_frequency * 1000,
                      self.Update)
     
-    def SilenceFullyChargedAlert(self, e):
-        ''' Silences the full charge alert, for use when not ready to leave charging point '''
-        self.laptop_batt.fully_charged_alert_enabled = False        
-        self.menu.Enable(id=ID_SILENCE_FULLY_CHARGED_ALERT, enable=False) 
-        logger.info("Silencing fully charged alert")
-
-    def SilenceUplugAlert(self, e):
-        ''' Silences the unplug alert, for use when a full charge is desired '''
-        self.laptop_batt.unplug_alert_enabled = False
-        self.menu.Enable(id=ID_SILENCE_UNPLUG_ALERT, enable=False) 
-        logger.info("Silencing unplug alert")
-    
-    def SilencePluginAlert(self, e):
-        ''' Silences the plugin alert, for use when away from a charging point '''
-        self.laptop_batt.plugin_alert_enabled = False
-        self.menu.Enable(id=ID_SILENCE_PLUGIN_ALERT, enable=False) 
-        logger.info("Silencing plug in alert")
-    
     def CheckFullyChargedBalloon(self):
         ''' Tests if fully charged and fires alert if required '''
         if (self.laptop_batt.is_fully_charged and
             self.laptop_batt.is_plugged_in and
             self.laptop_batt.fully_charged_alert_enabled):
-            logger.info("Showing fully charged balloon notification")
+            logging.info("Showing fully charged balloon notification")
             self.ShowBalloon("Fully charged",
                              "Your battery is now charged to 100%.")
     
@@ -294,25 +272,24 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         if self.laptop_batt.should_unplug():
             self.ShowBalloon("Unplug charger",
                              "Battery charge is at %i%%. Unplug your charger now to maintain battery life." % (charge * 100))
-            logger.info("Showing unplug balloon notification")
+            logging.info("Showing unplug balloon notification")
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
         if self.laptop_batt.should_plug_in():
             self.ShowBalloon("Plug in charger",
                              "Battery charge is at %i%%. Plug in your charger now to maintain battery life." % (charge * 100))
-            logger.info("Showing plug in balloon notification")
+            logging.info("Showing plug in balloon notification")
             winsound.MessageBeep(winsound.MB_ICONASTERISK)
     
     def RefreshIcon(self):
         ''' Sets the appropriate icon depending on power state '''
         logger.debug('Refreshing icon')
-        self.icon = self.BatteryIcon.GetIcon()
+        self.icon = self.SetBatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)        
         
     def CreateMenu(self):
         ''' Generates a context-aware menu. The user is only offered the relevant option
             depending on whether their laptop is plugged in '''
-        logger.info("Creating icon menu")
-#        self.Bind(wx.EVT_TASKBAR_LEFT_UP, self.OnLeftClickTaskbarIcon)        
+        logging.info("Creating icon menu")
         self.Bind(wx.EVT_TASKBAR_RIGHT_UP, self.OnPopup)        
         
         self.menu = wx.Menu()
@@ -341,6 +318,41 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
         self.menu.Append(wx.ID_EXIT, 'E&xit', 'Remove icon and quit application')
         self.Bind(wx.EVT_MENU, self.OnExit, id=wx.ID_EXIT)
+    
+    def SilenceFullyChargedAlert(self, e):
+        ''' Silences the full charge alert, for use when not ready to leave charging point '''
+        self.laptop_batt.fully_charged_alert_enabled = False        
+        self.menu.Enable(id=ID_SILENCE_FULLY_CHARGED_ALERT, enable=False) 
+        logging.info("Silencing fully charged alert")
+
+    def SilenceUplugAlert(self, e):
+        ''' Silences the unplug alert, for use when a full charge is desired '''
+        self.laptop_batt.unplug_alert_enabled = False
+        self.menu.Enable(id=ID_SILENCE_UNPLUG_ALERT, enable=False) 
+        logging.info("Silencing unplug alert")
+    
+    def SilencePluginAlert(self, e):
+        ''' Silences the plugin alert, for use when away from a charging point '''
+        self.laptop_batt.plugin_alert_enabled = False
+        self.menu.Enable(id=ID_SILENCE_PLUGIN_ALERT, enable=False) 
+        logging.info("Silencing plug in alert")
+    
+    def LaunchPowerOptions(self, e):
+        ''' Opens the Control Panel Power Options dialogue '''
+        try:
+            os.system('control.exe /name Microsoft.PowerOptions')
+        except:
+            os.system('control.exe main.cpl power')
+            
+    def LaunchNotificationAreaIconsOptions(self, e):
+        ''' Opens the Control Panel Notification Area Icons Options dialogue '''
+        os.system('control.exe /name Microsoft.NotificationAreaIcons')
+
+    def LaunchMobilityCenter(self, e):
+        ''' Opens the Windows Mobility Center dialogue '''
+        windir = os.environ['WINDIR']
+        os.system(os.path.join(windir, 'Sysnative\mblctr.exe'))
+
     
         
     def OnPopup(self, event):
