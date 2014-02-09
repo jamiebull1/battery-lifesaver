@@ -3,11 +3,25 @@ Created on 9 Feb 2014
 
 @author: Jamie
 '''
-import logging
+# Logging setup
 import wmi
 import platform
+import logging
 
 VERSION_NUMBER = '0.0.6-beta'
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+debug_handler = logging.FileHandler('bl_%s.debug.log' % VERSION_NUMBER)
+debug_handler.setLevel(logging.DEBUG)
+info_handler = logging.FileHandler('bl_%s.info.log' % VERSION_NUMBER)
+info_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+debug_handler.setFormatter(formatter)
+info_handler.setFormatter(formatter)
+logger.addHandler(debug_handler)
+logger.addHandler(info_handler)
+
 
 class BatteryMonitor:
     ''' Class containing methods for testing power supply and battery
