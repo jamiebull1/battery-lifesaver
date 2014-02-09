@@ -142,7 +142,6 @@ class BatteryMonitor:
             average_time_remaining = sum(self.time_remaining_queue)/len(self.time_remaining_queue)
             hours = int(average_time_remaining)
             mins = 60 * (average_time_remaining % 1.0)
-            print self.time_remaining_queue
             return '%i hr %i min' % (hours, mins)
 
     def reset_time_remaining_queue(self):
@@ -360,7 +359,7 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         logger.info("Closing application")
         self.options_window.Destroy()
         self.Destroy()
-        self.Close()
+        self.GetParent.Destroy()
         
     def OnAbout(self, e):
         ''' Launches the Battery Lifesaver webpage '''
@@ -379,7 +378,10 @@ class PowerStatusAndPlansWindow(wx.Frame):
         self.AlignToBottomCentre()
         self.panel = wx.Panel(self, wx.ID_ANY) 
         self.panel.SetBackgroundColour('white')
-        self.panel.Bind(wx.EVT_KILL_FOCUS, self.ToggleVisibility)      
+        self.tbicon.Bind(wx.EVT_KILL_FOCUS, lambda e: self.ToggleVisibility("Bound to window"))      
+        self.Bind(wx.EVT_KILL_FOCUS, lambda e: self.ToggleVisibility("Bound to window"))      
+        self.panel.Bind(wx.EVT_KILL_FOCUS, lambda e: self.ToggleVisibility("Bound to panel"))      
+        wx.EVT_KILL_FOCUS(self.panel, lambda e: self.ToggleVisibility("Bound to panel (old way)")) 
         self.InitUI()
 
     def AlignToBottomCentre(self):
@@ -390,17 +392,19 @@ class PowerStatusAndPlansWindow(wx.Frame):
         self.SetPosition((x, y))
 
     def ToggleVisibility(self, e):
+#        import pdb; pdb.set_trace()
         self.is_visible = not self.is_visible
         if self.is_visible == True:
             self.AlignToBottomCentre()
             self.Show()
+            self.Raise()
         else:
             self.Hide()
               
     def InitUI(self):
         self.GetDataForUI()
         self.PopulateUI()
-        self.Show()
+#        self.Show()
      
     def PopulateUI(self):
         self.main_vbox = wx.BoxSizer(wx.VERTICAL)
@@ -418,7 +422,7 @@ class PowerStatusAndPlansWindow(wx.Frame):
         self.main_vbox.Add((-1, 10))
          
         self.main_vbox.Add(self.plans_vbox, flag=wx.LEFT, border=20)    
-        self.main_vbox.Add(self.links_vbox, flag=wx.CENTER, border=20)
+        self.main_vbox.Add(self.links_vbox, flag=wx.TOP|wx.CENTER, border=20)
         self.panel.SetSizer(self.main_vbox)
      
     def GetDataForUI(self):
@@ -430,20 +434,20 @@ class PowerStatusAndPlansWindow(wx.Frame):
      
     def BatteryIcon(self, icon):
         self.icon_vbox = wx.BoxSizer(wx.VERTICAL)
-        pic = wx.StaticBitmap(self.panel)
-        pic.SetBitmap(icon.GetBitmap()) 
-        self.icon_vbox.Add(pic, flag=wx.LEFT|wx.TOP, border=10)
+        self.pic = wx.StaticBitmap(self.panel)
+        self.pic.SetBitmap(icon.GetBitmap()) 
+        self.icon_vbox.Add(self.pic, flag=wx.LEFT|wx.TOP, border=10)
      
     def SetPowerStatusText(self, text):
         self.summary_vbox = wx.BoxSizer(wx.VERTICAL)
-        txt = wx.StaticText(self.panel, wx.ID_ANY, text)
-        self.summary_vbox.Add(txt, flag=wx.RIGHT|wx.TOP, border=10)
+        self.power_status_txt = wx.StaticText(self.panel, wx.ID_ANY, text)
+        self.summary_vbox.Add(self.power_status_txt, flag=wx.RIGHT|wx.TOP, border=10)
      
     def SetBatteryStatuses(self, statuses):
         self.statuses_hbox = wx.BoxSizer(wx.HORIZONTAL)
         for status in statuses:
-            txt = wx.StaticText(self.panel, wx.ID_ANY, status)
-            self.statuses_hbox.Add(txt, flag=wx.TOP|wx.LEFT, border=10)
+            self.battery_statuses_txt = wx.StaticText(self.panel, wx.ID_ANY, status)
+            self.statuses_hbox.Add(self.battery_statuses_txt, flag=wx.TOP|wx.LEFT, border=10)
      
     def SetPowerPlanOptions(self):
         self.plans_vbox = wx.BoxSizer(wx.VERTICAL)
@@ -480,15 +484,14 @@ class PowerStatusAndPlansWindow(wx.Frame):
         self.links_vbox = wx.BoxSizer(wx.VERTICAL)
         link1 = wx.HyperlinkCtrl(self.panel, wx.ID_ANY, 'Adjust screen brightness')
         link1.Bind(wx.EVT_HYPERLINK, self.tbicon.LaunchPowerOptions)
-        self.links_vbox.Add(link1, flag=wx.CENTER|wx.TOP, border=2)
+        self.links_vbox.Add(link1, flag=wx.CENTER|wx.TOP, border=5)
         
         link2 = wx.HyperlinkCtrl(self.panel, wx.ID_ANY, 'More power options')
         link2.Bind(wx.EVT_HYPERLINK, self.tbicon.LaunchPowerOptions)
-        self.links_vbox.Add(link2, flag=wx.CENTER|wx.TOP, border=2)
+        self.links_vbox.Add(link2, flag=wx.CENTER|wx.TOP, border=5)
 
 
 def main():
-#    batt = BatteryMonitor()
     
     app = wx.App(False)
     BatteryTaskBarIcon()
