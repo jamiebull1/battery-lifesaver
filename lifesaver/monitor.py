@@ -74,7 +74,6 @@ class BatteryMonitor:
         
         return plugged_in
         
-    
     @property
     def is_fully_charged(self):
         ''' Returns True if laptop is fully charged '''        
@@ -83,7 +82,21 @@ class BatteryMonitor:
             return True
         else:
             return False            
-    
+
+    @property
+    def battery_statuses(self):
+        ''' Returns a list with percentage remaining or "Not present" for each battery '''
+        statuses = []
+        batts_details = self.t.ExecQuery('Select * from BatteryStatus where Voltage > 0')
+        batts_charge = self.t.ExecQuery('Select * from BatteryFullChargedCapacity')
+        for i, b in enumerate(batts_details):
+            if b.RemainingCapacity:
+                perc_charge = (b.RemainingCapacity or 0)/float(batts_charge[i].FullChargedCapacity)
+                statuses.append('Battery #%i: %i%% available' % (i+1, (perc_charge * 100)))
+            else:
+                statuses.append('Battery #%i: Not present' % i+1)
+        return statuses
+            
     @property
     def full_charge_capacity(self):
         ''' Returns capacity of the battery or batteries when fully charged '''
@@ -314,7 +327,9 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
     def OnExit(self, e):
         ''' Removes the icon from the notification area and closes the program '''
         logger.info("Closing application")
+        self.options_window.Destroy()
         self.Destroy()
+        self.Exit()
         
     def OnAbout(self, e):
         ''' Launches the Battery Lifesaver webpage '''
@@ -325,16 +340,22 @@ class PowerStatusAndPlansWindow(wx.Frame):
     
     def __init__(self, tbicon):
         frame = wx.Frame(None)
-        super(PowerStatusAndPlansWindow, self).__init__(frame, style=wx.CAPTION)
+        super(PowerStatusAndPlansWindow, self).__init__(frame, style=wx.FRAME_NO_TASKBAR|wx.CAPTION)
         self.tbicon = tbicon
         self.is_visible = False
         self.SetSize(wx.Size(270,350))
         self.AlignToBottomCenter(wx.GetMousePosition())
         self.panel = wx.Panel(self, wx.ID_ANY) 
         self.panel.SetBackgroundColour('white')
-        self.GetDataForUI()
-        self.PopulateUI()
-        
+        self.Show()
+
+    def AlignToBottomCenter(self, pos):
+        dw, dh = pos
+        w, h = self.GetSize()
+        x = dw - w/2
+        y = dh - h - 25
+        self.SetPosition((x, y))
+
     def ToggleVisibility(self, e):
         self.is_visible = not self.is_visible
         if self.is_visible:
@@ -342,59 +363,56 @@ class PowerStatusAndPlansWindow(wx.Frame):
             self.Show()
         else:
             self.Hide()
-    
+              
+    def UpdateUI(self):
+        self.GetDataForUI()
+        self.PopulateUI()
+        self.Show()
+     
     def PopulateUI(self):
-
+ 
         self.main_vbox = wx.BoxSizer(wx.VERTICAL)
         self.top_hbox = wx.BoxSizer(wx.HORIZONTAL)
-        
+         
         self.top_hbox.Add((20, -1))
         self.top_hbox.Add(self.icon_vbox, flag=wx.LEFT)
         self.top_hbox.Add((10, -1))
         self.top_hbox.Add(self.summary_vbox, flag=wx.RIGHT)
-
+ 
         self.main_vbox.Add(self.top_hbox)
         self.main_vbox.Add((-1, 10))
         self.main_vbox.Add(self.statuses_hbox)
-        
+         
         self.main_vbox.Add((-1, 10))
-        
+         
         self.main_vbox.Add(self.plans_vbox, flag=wx.LEFT, border=20)    
-        
+         
         self.panel.SetSizer(self.main_vbox)
-    
+     
     def GetDataForUI(self):
         self.SetBatteryIcon(self.tbicon.BatteryIcon)
         self.SetPowerStatusText(self.tbicon.Tooltip)
         self.SetBatteryStatuses(self.tbicon.laptop_batt.battery_statuses)
         self.SetPowerPlanOptions()
         self.SetLinks()
-        self.PopulateUI()
-    
-    def AlignToBottomCenter(self, pos):
-        dw, dh = pos
-        w, h = self.GetSize()
-        x = dw - w/2
-        y = dh - h - 25
-        self.SetPosition((x, y))
-    
+     
     def SetBatteryIcon(self, icon):
         self.icon_vbox = wx.BoxSizer(wx.VERTICAL)
         pic = wx.StaticBitmap(self.panel)
         pic.SetBitmap(icon.GetBitmap()) 
         self.icon_vbox.Add(pic, flag=wx.LEFT|wx.TOP, border=10)
-    
+     
     def SetPowerStatusText(self, text):
         self.summary_vbox = wx.BoxSizer(wx.VERTICAL)
         txt = wx.StaticText(self.panel, wx.ID_ANY, text)
         self.summary_vbox.Add(txt, flag=wx.RIGHT|wx.TOP, border=10)
-    
+     
     def SetBatteryStatuses(self, statuses):
         self.statuses_hbox = wx.BoxSizer(wx.HORIZONTAL)
         for status in statuses:
             txt = wx.StaticText(self.panel, wx.ID_ANY, status)
             self.statuses_hbox.Add(txt, flag=wx.TOP|wx.LEFT, border=10)
-    
+     
     def SetPowerPlanOptions(self):
         self.plans_vbox = wx.BoxSizer(wx.VERTICAL)
         txt = wx.StaticText(self.panel, wx.ID_ANY, 'Select a power plan:')
@@ -420,15 +438,15 @@ class PowerStatusAndPlansWindow(wx.Frame):
             sizer.Add(self.radios[i], border=5) 
         self.Bind(wx.EVT_RADIOBUTTON, self.ActivatePowerPlan)
         self.plans_vbox.Add(sizer, flag=wx.TOP|wx.LEFT)
-                
+                 
     def ActivatePowerPlan(self, e):
         name = e.EventObject.GetLabel()
         guid = self.guids[self.names.index(name)]
         os.system('powercfg -setactive %s' % guid)   
-        
+         
     def SetPowerWarnings(self):
         pass
-    
+     
     def SetLinks(self):
         pass
 
