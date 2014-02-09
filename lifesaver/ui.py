@@ -248,8 +248,10 @@ class LeftClickFrame(wx.Frame):
     
     def __init__(self, frame):
         super(LeftClickFrame, self).__init__(frame, style=wx.FRAME_NO_TASKBAR|wx.CAPTION)
+        self.parent = frame
         self.tbicon = frame.tbicon
         self.tbicon.options_window = self
+        self.WIDTH = 270
         self.InitUI()
 
     def AlignToBottomCentre(self):
@@ -263,20 +265,20 @@ class LeftClickFrame(wx.Frame):
     def InitUI(self):
         logger.info("Initialising left click UI")
             
-        self.SetSize(wx.Size(270,350))
+        self.SetSize(wx.Size(self.WIDTH,350))
         self.AlignToBottomCentre()
         self.panel = wx.Panel(self, wx.ID_ANY) 
         self.panel.SetBackgroundColour('white')
-        self.panel.Bind(wx.EVT_KILL_FOCUS, self.Close)      
+        self.Bind(wx.EVT_ACTIVATE, self.Close)  #bind it to Frame
         self.PopulateUI()
         
         self.Show()
         self.Raise()
     
-    def Close(self):
-        self.tbicon.options_window.Destroy()
-        self.Destroy()
-    
+    def Close(self, e):
+        if e.GetActive() != True:
+            self.tbicon.options_window.Destroy()
+
     def PopulateUI(self):
         logger.info("Populating left click UI")
         self.main_vbox = wx.BoxSizer(wx.VERTICAL)
@@ -294,26 +296,37 @@ class LeftClickFrame(wx.Frame):
 
         links_vbox = self.GetLinksVBox()
         self.main_vbox.Add(links_vbox, flag=wx.TOP|wx.CENTER, border=20)
+        self.main_vbox.Add((-1, 20))
 
         self.panel.SetSizer(self.main_vbox)
      
     def GetTopHBox(self):
-        self.RetrieveCurrentTaskbarIcon()
-        self.RetrievePowerStatusSummary(self.tbicon.Tooltip)
+        icon_vbox = self.RetrieveCurrentTaskbarIcon()
+        summary_status_vbox = self.RetrievePowerStatusSummary()
         top_hbox = wx.BoxSizer(wx.HORIZONTAL)
         top_hbox.Add((20, -1))
-        top_hbox.Add(self.icon_vbox, flag=wx.LEFT)
+        top_hbox.Add(icon_vbox, flag=wx.LEFT)
         top_hbox.Add((10, -1))
-        top_hbox.Add(self.summary_status_vbox, flag=wx.RIGHT)
+        top_hbox.Add(summary_status_vbox, flag=wx.RIGHT)
         return top_hbox
 
     def RetrieveCurrentTaskbarIcon(self):
         logger.debug("Setting up battery icon")
         icon = self.tbicon.current_icon
-        self.icon_vbox = wx.BoxSizer(wx.VERTICAL)
-        self.pic = wx.StaticBitmap(self.panel)
-        self.pic.SetBitmap(icon.GetBitmap()) 
-        self.icon_vbox.Add(self.pic, flag=wx.LEFT|wx.TOP, border=10)
+        icon_vbox = wx.BoxSizer(wx.VERTICAL)
+        pic = wx.StaticBitmap(self.panel)
+        pic.SetBitmap(icon.GetBitmap()) 
+        icon_vbox.Add(pic, flag=wx.LEFT|wx.TOP, border=10)
+        return icon_vbox
+     
+    def RetrievePowerStatusSummary(self):
+        logger.debug("Setting up power status text")
+        tooltip = self.tbicon.Tooltip
+        summary_status_vbox = wx.BoxSizer(wx.VERTICAL)
+        txt = wx.StaticText(self.panel, wx.ID_ANY, tooltip)
+        txt.Wrap(self.WIDTH - 100)
+        summary_status_vbox.Add(txt, flag=wx.RIGHT|wx.TOP, border=10)
+        return summary_status_vbox
      
     def GetStatusesVBox(self):
         logger.debug("Setting up battery statuses")
@@ -365,12 +378,6 @@ class LeftClickFrame(wx.Frame):
         plans_vbox.Add(sizer, flag=wx.TOP|wx.LEFT)
         return plans_vbox
                  
-    def RetrievePowerStatusSummary(self, text):
-        logger.debug("Setting up power status text")
-        self.summary_status_vbox = wx.BoxSizer(wx.VERTICAL)
-        self.power_status_txt = wx.StaticText(self.panel, wx.ID_ANY, text)
-        self.summary_status_vbox.Add(self.power_status_txt, flag=wx.RIGHT|wx.TOP, border=10)
-     
     def ActivatePowerPlan(self, e):
         name = e.EventObject.GetLabel()
         logger.info("Activating power plan %s" % name)
@@ -382,20 +389,15 @@ class TaskBarFrame(wx.Frame):
     def __init__(self, parent, title):
         wx.Frame.__init__(self, parent, style=wx.FRAME_NO_TASKBAR)
         self.tbicon = BatteryTaskBarIcon(self)
-        self.left_frame = None
         wx.EVT_TASKBAR_LEFT_UP(self.tbicon, self.OnTaskBarLeftClick)
 
     def OnTaskBarLeftClick(self, evt):
         ''' Creates/destroys left click menu '''
-        if not self.left_frame is None:
-            self.left_frame.Destroy()
-            self.left_frame = None
-        else:
-            self.left_frame = LeftClickFrame(self)
+        self.left_frame = LeftClickFrame(self)
 
 
 def main():
-    
+
     app = wx.App(False)
     TaskBarFrame(None, "TaskBarFrame")
     app.MainLoop()
