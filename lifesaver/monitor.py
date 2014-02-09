@@ -168,6 +168,13 @@ class BatteryMonitor:
 ID_SILENCE_UNPLUG_ALERT = wx.NewId()
 ID_SILENCE_PLUGIN_ALERT = wx.NewId()
 ID_SILENCE_FULLY_CHARGED_ALERT = wx.NewId()
+ID_SCREEN_BRIGHTNESS = wx.NewId()
+ID_POWER_OPTIONS = wx.NewId()
+ID_SCREEN_BRIGHTNESS = wx.NewId()
+ID_SCREEN_BRIGHTNESS = wx.NewId()
+ID_SCREEN_BRIGHTNESS = wx.NewId()
+ID_SCREEN_BRIGHTNESS = wx.NewId()
+ID_SCREEN_BRIGHTNESS = wx.NewId()
 
 class BatteryTaskBarIcon(wx.TaskBarIcon):
     ''' Notification area (system tray) icon for output to user about their
@@ -305,20 +312,36 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         ''' Generates a context-aware menu. The user is only offered the relevant option
             depending on whether their laptop is plugged in '''
         logger.info("Creating icon menu")
+#        self.Bind(wx.EVT_TASKBAR_LEFT_UP, self.OnLeftClickTaskbarIcon)        
         self.Bind(wx.EVT_TASKBAR_RIGHT_UP, self.OnPopup)        
         
         self.menu = wx.Menu()
+        # Alert buttons
         self.menu.Append(ID_SILENCE_FULLY_CHARGED_ALERT, 'Silence &Full Charge Alert', 'Continue not showing alerts')
         self.Bind(wx.EVT_MENU, self.SilenceFullyChargedAlert, id=ID_SILENCE_FULLY_CHARGED_ALERT)
         self.menu.Append(ID_SILENCE_PLUGIN_ALERT, 'Silence &Plugin Alert', 'Wait until next plugged in before resuming alerts')
         self.Bind(wx.EVT_MENU, self.SilencePluginAlert, id=ID_SILENCE_PLUGIN_ALERT)
         self.menu.Append(ID_SILENCE_UNPLUG_ALERT, 'Silence &Unplug Alert', 'Fully charge without showing alerts')
         self.Bind(wx.EVT_MENU, self.SilenceUplugAlert, id=ID_SILENCE_UNPLUG_ALERT)
+        
+        # Replicated Windows Power Widget options here
+        self.menu.AppendSeparator()
+        self.menu.Append(ID_SCREEN_BRIGHTNESS, 'Adjust screen brightness', 'Launch Power Options dialogue')
+        self.Bind(wx.EVT_MENU, self.LaunchPowerOptions, id=ID_SCREEN_BRIGHTNESS)
+        self.menu.Append(ID_POWER_OPTIONS, 'Power Options', 'Launch Power Options dialogue')
+        self.Bind(wx.EVT_MENU, self.LaunchPowerOptions, id=ID_POWER_OPTIONS)
+        self.menu.Append(ID_MOBILITY_CENTER, 'Windows Mobility Center', 'Launch Windows Mobility Center dialogue')
+        self.Bind(wx.EVT_MENU, self.LaunchMobilityCenter, id=ID_MOBILITY_CENTER)
+        self.menu.AppendSeparator()
+        self.menu.Append(ID_NOTIFICATION_ICONS, 'Turn system icons on or off', 'Launch Windows Notification Area Icons Options dialogue')
+        self.Bind(wx.EVT_MENU, self.LaunchNotificationAreaIconsOptions, id=ID_NOTIFICATION_ICONS)
+        # About and Exit options
         self.menu.AppendSeparator()
         self.menu.Append(wx.ID_ABOUT, '&Website', 'About this program')
         self.Bind(wx.EVT_MENU, self.OnAbout, id=wx.ID_ABOUT)
         self.menu.Append(wx.ID_EXIT, 'E&xit', 'Remove icon and quit application')
         self.Bind(wx.EVT_MENU, self.OnExit, id=wx.ID_EXIT)
+    
         
     def OnPopup(self, event):
         ''' Generates the right click menu '''
