@@ -167,7 +167,7 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         self.monitor_frequency = 2 # how often to check levels (secs)
         self.full_charge_reminder_frequency = 300 # how often to remind that battery is full (secs)
         self.laptop_batt = laptop_batt
-        self.options_window = PowerStatusAndPlansWindow()
+        self.options_window = PowerStatusAndPlansWindow(self)
         self.icon = self.BatteryIcon.GetIcon()
         self.SetIcon(self.icon, self.Tooltip)
         self.CreateMenu()
@@ -323,15 +323,17 @@ class BatteryTaskBarIcon(wx.TaskBarIcon):
         
 class PowerStatusAndPlansWindow(wx.Frame):
     
-    def __init__(self):
+    def __init__(self, tbicon):
         frame = wx.Frame(None)
         super(PowerStatusAndPlansWindow, self).__init__(frame, style=wx.CAPTION)
+        self.tbicon = tbicon
         self.is_visible = False
         self.SetSize(wx.Size(270,350))
         self.AlignToBottomCenter(wx.GetMousePosition())
         self.panel = wx.Panel(self, wx.ID_ANY) 
         self.panel.SetBackgroundColour('white')
-        self.InitUI()
+        self.GetDataForUI()
+        self.PopulateUI()
         
     def ToggleVisibility(self, e):
         self.is_visible = not self.is_visible
@@ -341,7 +343,7 @@ class PowerStatusAndPlansWindow(wx.Frame):
         else:
             self.Hide()
     
-    def InitUI(self):
+    def PopulateUI(self):
 
         self.main_vbox = wx.BoxSizer(wx.VERTICAL)
         self.top_hbox = wx.BoxSizer(wx.HORIZONTAL)
@@ -361,8 +363,13 @@ class PowerStatusAndPlansWindow(wx.Frame):
         
         self.panel.SetSizer(self.main_vbox)
     
-    def UpdateUI(self):
-        pass
+    def GetDataForUI(self):
+        self.SetBatteryIcon(self.tbicon.BatteryIcon)
+        self.SetPowerStatusText(self.tbicon.Tooltip)
+        self.SetBatteryStatuses(self.tbicon.laptop_batt.battery_statuses)
+        self.SetPowerPlanOptions()
+        self.SetLinks()
+        self.PopulateUI()
     
     def AlignToBottomCenter(self, pos):
         dw, dh = pos
@@ -430,7 +437,6 @@ def main():
     
     app = wx.App(False)
     BatteryTaskBarIcon(batt)
-#    PowerStatusAndPlansWindow()
     app.MainLoop()
 
 if __name__ == '__main__':
